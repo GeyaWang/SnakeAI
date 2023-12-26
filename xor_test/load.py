@@ -1,4 +1,4 @@
-from model import Model
+from neural_network import Model
 import numpy as np
 
 

@@ -1,6 +1,6 @@
 import numpy as np
-from layer import LayerType, FullyConnectedLayer, ActivationLayer
-from loss_func import LossFunc
+from .layer import LayerType, FullyConnectedLayer, ActivationLayer
+from .loss_func import LossFunc
 from typing import Callable, Type
 import os
 import pickle

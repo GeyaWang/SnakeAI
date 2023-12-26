@@ -1,7 +1,4 @@
-from model import Model
-from layer import LayerType
-from activation_func import tanh_func, tanh_prime_func
-from loss_func import MeanSquaredError
+from neural_network import Model, LayerType, tanh_func, tanh_prime_func, MeanSquaredError
 import numpy as np
 import random
 
