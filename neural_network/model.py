@@ -1,7 +1,8 @@
 import numpy as np
 from .layer import LayerType, FullyConnectedLayer, ActivationLayer
 from .loss_func import LossFunc
-from typing import Callable, Type
+from .activation_func import ActivationFunction
+from typing import Type
 import os
 import pickle
 
@@ -35,7 +36,7 @@ class Model:
 
         return output
 
-    def add_layer(self, layer: LayerType, input_size: int = None, output_size: int = None, activation_func: Callable = None, activation_prime_func: Callable = None):
+    def add_layer(self, layer: LayerType, input_size: int = None, output_size: int = None, activation_func: Type[ActivationFunction] = None):
         """Add specified layer to the neural network"""
 
         match layer:
@@ -43,13 +44,13 @@ class Model:
                 if isinstance(input_size, int) and isinstance(output_size, int):
                     self.layers.append(FullyConnectedLayer(self.learning_rate, input_size, output_size))
                 else:
-                    raise ValueError('Incorrect argument for layer. Specify "input_size" and "output_size" as integers')
+                    raise ValueError('Incorrect argument for "layer". Specify "input_size" and "output_size" as integers')
 
             case LayerType.ACTIVATION_LAYER:
-                if isinstance(activation_func, Callable) and isinstance(activation_prime_func, Callable):
-                    self.layers.append(ActivationLayer(activation_func, activation_prime_func))
+                if isinstance(activation_func, type) and issubclass(activation_func, ActivationFunction):
+                    self.layers.append(ActivationLayer(activation_func))
                 else:
-                    raise ValueError('Incorrect argument for layer. Specify "activation_func" and "activation_func_prime" as callable functions')
+                    raise ValueError('Incorrect argument for "activation_func"')
 
     def train_step(self, input_data: np.ndarray, expected_output: np.ndarray):
         """Train the neural network"""

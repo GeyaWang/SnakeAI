@@ -1,7 +1,8 @@
+from .activation_func import ActivationFunction
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 import numpy as np
-from typing import Callable
+from typing import Type
 
 
 class LayerType(Enum):
@@ -67,14 +68,13 @@ class FullyConnectedLayer(Layer):
 
 
 class ActivationLayer(Layer):
-    def __init__(self, activation_func: Callable, activation_func_prime: Callable):
+    def __init__(self, activation_func: Type[ActivationFunction]):
         super().__init__()
 
         self.activation_func = activation_func
-        self.activation_prime_func = activation_func_prime
 
-        self.vectorised_activation_func = np.vectorize(self.activation_func)
-        self.vectorised_activation_prime_func = np.vectorize(self.activation_prime_func)
+        self.vectorised_activation_func = np.vectorize(self.activation_func.func)
+        self.vectorised_activation_prime_func = np.vectorize(self.activation_func.prime_func)
 
     def forward(self, input_: np.ndarray) -> np.ndarray:
         """Applies activation function to each input"""
