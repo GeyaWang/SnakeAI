@@ -90,8 +90,8 @@ class Play:
             # draw
             self.draw.background()
 
-            for x, y in self.game.snake_body:
-                self.draw.tile((x, y), SNAKE_COLOUR)
+            for coord in self.game.snake_body:
+                self.draw.tile(coord, SNAKE_COLOUR)
 
             self.draw.tile(self.game.apple_pos, APPLE_COLOUR)
 
