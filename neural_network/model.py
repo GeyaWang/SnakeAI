@@ -61,7 +61,34 @@ class Model:
         error_grad = self.loss_func.prime_func(expected_output, predicted_output)
         print(f'{error=}, {error_grad=}, {predicted_output=}')
 
+        # backward propagation
         output_err_grad = error_grad
+        for layer in reversed(self.layers):
+            output_err_grad = layer.backward(output_err_grad)
+
+    def train_batch(self, input_data_arr: np.ndarray[np.ndarray], expected_output_arr: np.ndarray[np.ndarray]):
+        """Train in a batch, accumulating the error gradients before backward propagation"""
+
+        if len(input_data_arr) != len(expected_output_arr):
+            raise ValueError('Lengths of "input_data_arr" and "expected_output_arr" do not match')
+
+        total_error_grad = None
+
+        for i in range(len(input_data_arr)):
+            input_data = input_data_arr[i]
+            expected_output = expected_output_arr[i]
+
+            predicted_output = self.predict(input_data)
+            error_grad = self.loss_func.prime_func(expected_output, predicted_output)
+
+            # accumulate error gradients
+            if total_error_grad is None:
+                total_error_grad = error_grad
+            else:
+                total_error_grad = np.add(total_error_grad, error_grad)
+
+        # backward propagation
+        output_err_grad = total_error_grad
         for layer in reversed(self.layers):
             output_err_grad = layer.backward(output_err_grad)
 
