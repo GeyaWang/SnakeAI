@@ -27,15 +27,6 @@ class Model:
     def __str__(self):
         return f'\nNetwork Object:\nlearning_rate={self.learning_rate}\nloss_func={self.loss_func}\nlayers={self.layers}\n'
 
-    def forward(self, input_: np.ndarray) -> np.ndarray:
-        """Do forward propagation through all layers"""
-
-        output = input_
-        for layer in self.layers:
-            output = layer.forward(output)
-
-        return output
-
     def add_layer(self, layer: LayerType, input_size: int = None, output_size: int = None, activation_func: Type[ActivationFunction] = None):
         """Add specified layer to the neural network"""
 
@@ -52,10 +43,19 @@ class Model:
                 else:
                     raise ValueError('Incorrect argument for "activation_func"')
 
+    def predict(self, input_: np.ndarray) -> np.ndarray:
+        """Do forward propagation through all layers"""
+
+        output = input_
+        for layer in self.layers:
+            output = layer.forward(output)
+
+        return output
+
     def train_step(self, input_data: np.ndarray, expected_output: np.ndarray):
         """Train the neural network"""
 
-        predicted_output = self.forward(input_data)
+        predicted_output = self.predict(input_data)
 
         error = self.loss_func.func(expected_output, predicted_output)
         error_grad = self.loss_func.prime_func(expected_output, predicted_output)
