@@ -11,10 +11,25 @@ def train(model: Model):
         (np.array([[1, 1]]), np.array([[0,]]))
     ]
 
+    inputs = np.array([
+        np.array([[0, 0]]),
+        np.array([[1, 0]]),
+        np.array([[0, 1]]),
+        np.array([[1, 1]])
+    ])
+
+    outputs = np.array([
+        np.array([[0, ]]),
+        np.array([[1, ]]),
+        np.array([[1, ]]),
+        np.array([[0, ]])
+    ])
+
     for i in range(1000):
-        input_data, expected_output = random.choice(training_data)
-        print(f'\n{input_data=}, {expected_output=}')
-        model.train_step(input_data, expected_output)
+        # input_data, expected_output = random.choice(training_data)
+        # print(f'\n{input_data=}, {expected_output=}')
+        # model.train_step(input_data, expected_output)
+        model.train_step(inputs, outputs)
 
     model.save_model('training_data.pkl')
 

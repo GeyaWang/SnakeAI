@@ -16,7 +16,7 @@ class Layer(ABC):
         self.input = None  # save input from forward propagation for backward propagation
 
     @abstractmethod
-    def forward(self, input_: np.ndarray) -> np.ndarray:
+    def forward(self, input_: np.ndarray, save_input: bool = True) -> np.ndarray:
         pass
 
     @abstractmethod
@@ -39,11 +39,13 @@ class FullyConnectedLayer(Layer):
         self.weights = np.random.rand(input_size, output_size) - 0.5
         self.biases = np.random.rand(1, output_size) - 0.5
 
-    def forward(self, input_: np.ndarray) -> np.ndarray:
+    def forward(self, input_: np.ndarray, save_input: bool = True) -> np.ndarray:
         """Applies formula Y = B + XW"""
 
         try:
-            self.input = input_
+            if save_input:
+                self.input = input_
+
             output = self.biases + np.dot(self.input, self.weights)
             return output
         except ValueError:
@@ -76,11 +78,12 @@ class ActivationLayer(Layer):
         self.vectorised_activation_func = np.vectorize(self.activation_func.func)
         self.vectorised_activation_prime_func = np.vectorize(self.activation_func.prime_func)
 
-    def forward(self, input_: np.ndarray) -> np.ndarray:
+    def forward(self, input_: np.ndarray, save_input: bool = True) -> np.ndarray:
         """Applies activation function to each input"""
 
         # note: vectorising a function is generally not efficient
-        self.input = input_
+        if save_input:
+            self.input = input_
         return self.vectorised_activation_func(self.input)
 
     def backward(self, output_grad: np.ndarray) -> np.ndarray:

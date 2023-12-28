@@ -3,6 +3,7 @@ from .layer import LayerType, FullyConnectedLayer, ActivationLayer
 from .loss_func import LossFunc
 from .activation_func import ActivationFunction
 from typing import Type
+from copy import deepcopy
 import os
 import pickle
 
@@ -24,6 +25,9 @@ class Model:
         else:
             self.layers = []
 
+    def copy(self):
+        return deepcopy(self)
+
     def __str__(self):
         return f'\nNetwork Object:\nlearning_rate={self.learning_rate}\nloss_func={self.loss_func}\nlayers={self.layers}\n'
 
@@ -44,7 +48,7 @@ class Model:
                     raise ValueError('Incorrect argument for "activation_func"')
 
     def predict(self, input_: np.ndarray) -> np.ndarray:
-        """Do forward propagation through all layers"""
+        """Do forward propagation through all layers, not saving inputs"""
 
         output = input_
         for layer in self.layers:
@@ -52,45 +56,31 @@ class Model:
 
         return output
 
-    def train_step(self, input_data: np.ndarray, expected_output: np.ndarray):
-        """Train the neural network"""
+    def forward_propagation(self, input_: np.ndarray) -> np.ndarray:
+        """Do forward propagation through all layers, saving inputs"""
 
-        predicted_output = self.predict(input_data)
+        output = input_
+        for layer in self.layers:
+            output = layer.forward(output)
 
-        error = self.loss_func.func(expected_output, predicted_output)
-        error_grad = self.loss_func.prime_func(expected_output, predicted_output)
-        print(f'{error=}, {error_grad=}, {predicted_output=}')
+        return output
 
-        # backward propagation
+    def backward_propagation(self, error_grad: np.ndarray):
         output_err_grad = error_grad
         for layer in reversed(self.layers):
             output_err_grad = layer.backward(output_err_grad)
 
-    def train_batch(self, input_data_arr: np.ndarray[np.ndarray], expected_output_arr: np.ndarray[np.ndarray]):
-        """Train in a batch, accumulating the error gradients before backward propagation"""
+    def train_step(self, input_data: np.ndarray, expected_outputs: np.ndarray):
+        """Train the neural network"""
 
-        if len(input_data_arr) != len(expected_output_arr):
-            raise ValueError('Lengths of "input_data_arr" and "expected_output_arr" do not match')
+        predicted_output = self.forward_propagation(input_data)
 
-        total_error_grad = None
-
-        for i in range(len(input_data_arr)):
-            input_data = input_data_arr[i]
-            expected_output = expected_output_arr[i]
-
-            predicted_output = self.predict(input_data)
-            error_grad = self.loss_func.prime_func(expected_output, predicted_output)
-
-            # accumulate error gradients
-            if total_error_grad is None:
-                total_error_grad = error_grad
-            else:
-                total_error_grad = np.add(total_error_grad, error_grad)
+        error = self.loss_func.func(expected_outputs, predicted_output)
+        error_grad = self.loss_func.prime_func(expected_outputs, predicted_output)
+        # print(f'{error=}, {error_grad=}, {predicted_output=}')
 
         # backward propagation
-        output_err_grad = total_error_grad
-        for layer in reversed(self.layers):
-            output_err_grad = layer.backward(output_err_grad)
+        self.backward_propagation(error_grad)
 
     def save_model(self, filename: str):
         """Save model to pickle file"""
