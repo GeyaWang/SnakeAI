@@ -3,20 +3,21 @@ from snake_game import Game, Direction, Window
 import random
 import numpy as np
 import matplotlib.pyplot as plt
+from collections import deque
 
-LEARNING_RATE = 0.005
+LEARNING_RATE = 0.01
 INITIAL_EPSILON = 1
-EPSILON_DECAY = 0.996
+EPSILON_DECAY = 0.997
 MIN_EPSILON = 0.1
 UPDATE_TARGET_MODEL_FREQUENCY = 200
 N_EPISODES = 2000
-BATCH_SIZE = 32
 GAMMA = 0.99
 
 WIDTH = 21
 HEIGHT = 21
 TILE_SIZE = 20
 GAP_SIZE = 2
+FPS = 120
 IS_SHOW_WINDOW = False
 
 
@@ -132,15 +133,15 @@ class Agent:
         reward = 0
 
         if is_game_over:
-            reward -= 20  # punishment for death
+            reward -= 10  # punishment for death
         else:
-            if time_since_eaten_apple > 40:
+            if time_since_eaten_apple > 50:
                 reward -= 1  # punish for just surviving, not eating apple
             else:
                 reward += 1  # reward survival
 
         if is_eaten_apple:
-            reward += 20  # reward eating apple
+            reward += 10  # reward eating apple
 
         return reward
 
