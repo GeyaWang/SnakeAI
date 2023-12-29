@@ -52,6 +52,7 @@ class Game:
 
         snake_body = self.snake_body.copy()
         direction = self.direction
+        new_head_pos = self.head_pos
 
         is_game_over = False
         is_eaten_apple = False
@@ -62,7 +63,7 @@ class Game:
             direction = action
 
         # move
-        new_head_pos = (self.head_pos[0] + action.value[0], self.head_pos[1] + action.value[1])
+        new_head_pos = (new_head_pos[0] + action.value[0], new_head_pos[1] + action.value[1])
 
         # check if dead
         # # done before new head added
