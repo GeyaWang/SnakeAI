@@ -56,7 +56,7 @@ class FullyConnectedLayer(Layer):
 
         # calculation
         weight_err_grad = np.dot(self.input.T, output_err_grad)  # dE/dW = X.T * dE/dY
-        bias_err_grad = output_err_grad  # dE/dB = dE/dY
+        bias_err_grad = np.sum(output_err_grad, axis=0)  # dE/dB = dE/dY
         input_err_grad = np.dot(output_err_grad, self.weights.T)  # dE/dX = dE/dY * W.T
 
         # adjust weights and biases
