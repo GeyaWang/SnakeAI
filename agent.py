@@ -4,20 +4,27 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import deque
+from datetime import datetime, timedelta
 
-LEARNING_RATE = 0.01
+LEARNING_RATE = 0.007
 INITIAL_EPSILON = 1
-EPSILON_DECAY = 0.997
+EPSILON_DECAY = 0.998
 MIN_EPSILON = 0.1
 UPDATE_TARGET_MODEL_FREQUENCY = 200
-N_EPISODES = 2000
+MAX_MEMORY_BUFFER = 1_000
+N_EPISODES = 100_000
 GAMMA = 0.99
+BATCH_SIZE = 256
+COLLISION_DETECTION_RADIUS = 3
+UPDATE_MILESTONE = 100
+SAVE_MODEL_MILESTONE = 1000
+MODEL_SAVE_PATH = 'snake_model.pkl'
 
 WIDTH = 21
 HEIGHT = 21
 TILE_SIZE = 20
 GAP_SIZE = 2
-FPS = 120
+FPS = 30
 IS_SHOW_WINDOW = False
 
 
@@ -39,11 +46,11 @@ class Agent:
     def __init__(self, model: Model = None, game: Game = None):
         if model is None:
             self.main_model = Model(learning_rate=LEARNING_RATE, loss_func=MeanSquaredError)
-            self.main_model.add_layer(LayerType.FCL, input_size=11, output_size=32)
+            self.main_model.add_layer(LayerType.FCL, input_size=7 + ((COLLISION_DETECTION_RADIUS * 2) + 1) ** 2, output_size=64)
             self.main_model.add_layer(LayerType.ACTIVATION_LAYER, activation_func=Tanh)
-            self.main_model.add_layer(LayerType.FCL, input_size=32, output_size=24)
+            self.main_model.add_layer(LayerType.FCL, input_size=64, output_size=64)
             self.main_model.add_layer(LayerType.ACTIVATION_LAYER, activation_func=Tanh)
-            self.main_model.add_layer(LayerType.FCL, input_size=24, output_size=3)
+            self.main_model.add_layer(LayerType.FCL, input_size=64, output_size=3)
             self.target_model = self.main_model.copy()
         else:
             self.main_model = model
@@ -57,42 +64,13 @@ class Agent:
             self.window = Window(FPS, self.game, WIDTH, HEIGHT, TILE_SIZE, GAP_SIZE)
 
         self.epsilon = INITIAL_EPSILON
+        self.replay_memory = deque(maxlen=MAX_MEMORY_BUFFER)
+        self.running_score_list = deque(maxlen=UPDATE_MILESTONE)
 
     def decay_epsilon(self):
         """Reduce epsilon to encourage exploitation"""
 
         self.epsilon = max(self.epsilon * EPSILON_DECAY, MIN_EPSILON)
-
-    def get_state(self) -> np.ndarray:
-        """Returns simplified game state"""
-
-        is_collision_left = self.game.simulate_step(rotate_direction(self.game.direction, is_clockwise=False))[0]
-        is_collision_straight = self.game.simulate_step(self.game.direction)[0]
-        is_collision_right = self.game.simulate_step(rotate_direction(self.game.direction, is_clockwise=True))[0]
-        is_direction_up = self.game.direction == Direction.UP
-        is_direction_right = self.game.direction == Direction.RIGHT
-        is_direction_down = self.game.direction == Direction.DOWN
-        is_direction_left = self.game.direction == Direction.LEFT
-        is_apple_up = self.game.apple_pos[1] < self.game.head_pos[1]  # (0, 0) is top left
-        is_apple_right = self.game.apple_pos[0] > self.game.head_pos[0]
-        is_apple_down = self.game.apple_pos[1] > self.game.head_pos[1]
-        is_apple_left = self.game.apple_pos[0] < self.game.head_pos[0]
-
-        state = np.array([
-            is_collision_left,
-            is_collision_straight,
-            is_collision_right,
-            is_direction_up,
-            is_direction_right,
-            is_direction_down,
-            is_direction_left,
-            is_apple_up,
-            is_apple_right,
-            is_apple_down,
-            is_apple_left
-        ], dtype=int)
-
-        return state
 
     @staticmethod
     def index_to_action(direction: Direction, index: int = None, action: Direction = None, is_reversed: bool = False):
@@ -107,6 +85,20 @@ class Agent:
             return action_list[index]
         else:  # if is_reversed
             return action_list.index(action)
+
+    @staticmethod
+    def get_reward(is_game_over: bool, is_eaten_apple: bool) -> int:
+        """Assign reward values for survival, death and eating apple"""
+
+        reward = 0
+
+        if is_game_over:
+            reward -= 10  # punishment for death
+
+        if is_eaten_apple:
+            reward += 10  # reward eating apple
+
+        return reward
 
     def get_action(self, state: np.array, epsilon: float = None) -> Direction:
         """Epsilon greedy policy"""
@@ -126,104 +118,187 @@ class Agent:
 
         return self.index_to_action(self.game.direction, action_index)
 
-    @staticmethod
-    def get_reward(is_game_over: bool, is_eaten_apple: bool, time_since_eaten_apple: int) -> int:
-        """Assign reward values for survival, death and eating apple"""
+    def get_tile_state(self, x: int, y: int) -> float:
+        """Returns value based on tile state"""
 
-        reward = 0
-
-        if is_game_over:
-            reward -= 10  # punishment for death
+        if self.game.apple_pos == (x, y):
+            return 1
+        elif (x, y) in self.game.snake_body or x >= WIDTH or x < 0 or y >= HEIGHT or y < 0:
+            return 0
         else:
-            if time_since_eaten_apple > 50:
-                reward -= 1  # punish for just surviving, not eating apple
-            else:
-                reward += 1  # reward survival
+            return 0.5
 
-        if is_eaten_apple:
-            reward += 10  # reward eating apple
+    def get_state(self) -> np.ndarray:
+        """Returns simplified game state"""
 
-        return reward
+        # list of bools if collision in square around snake head, match snake direction
+        match self.game.direction:
+            case Direction.UP:
+                collision_list = [
+                    self.get_tile_state(x, y)
+                    for x in range(self.game.head_pos[0] - COLLISION_DETECTION_RADIUS, self.game.head_pos[0] + COLLISION_DETECTION_RADIUS + 1)
+                    for y in range(self.game.head_pos[1] - COLLISION_DETECTION_RADIUS, self.game.head_pos[1] + COLLISION_DETECTION_RADIUS + 1)
+                    if (x, y) != self.game.head_pos
+                ]
+            case Direction.RIGHT:
+                collision_list = [
+                    self.get_tile_state(x, y)
+                    for y in range(self.game.head_pos[1] - COLLISION_DETECTION_RADIUS, self.game.head_pos[1] + COLLISION_DETECTION_RADIUS + 1)
+                    for x in range(self.game.head_pos[0] + COLLISION_DETECTION_RADIUS, self.game.head_pos[0] - COLLISION_DETECTION_RADIUS - 1, -1)
+                    if (x, y) != self.game.head_pos
+                ]
+            case Direction.DOWN:
+                collision_list = [
+                    self.get_tile_state(x, y)
+                    for x in range(self.game.head_pos[0] + COLLISION_DETECTION_RADIUS, self.game.head_pos[0] - COLLISION_DETECTION_RADIUS - 1, -1)
+                    for y in range(self.game.head_pos[1] + COLLISION_DETECTION_RADIUS, self.game.head_pos[1] - COLLISION_DETECTION_RADIUS - 1, -1)
+                    if (x, y) != self.game.head_pos
+                ]
+            case _:
+                collision_list = [
+                    self.get_tile_state(x, y)
+                    for y in range(self.game.head_pos[1] + COLLISION_DETECTION_RADIUS, self.game.head_pos[1] - COLLISION_DETECTION_RADIUS - 1, -1)
+                    for x in range(self.game.head_pos[0] - COLLISION_DETECTION_RADIUS, self.game.head_pos[0] + COLLISION_DETECTION_RADIUS + 1)
+                    if (x, y) != self.game.head_pos
+                ]
 
-    def update_model(self, state: np.matrix, direction: Direction, action: Direction, reward: int, next_state: np.matrix):
+        is_direction_up = self.game.direction == Direction.UP
+        is_direction_right = self.game.direction == Direction.RIGHT
+        is_direction_down = self.game.direction == Direction.DOWN
+        is_direction_left = self.game.direction == Direction.LEFT
+        is_apple_up = self.game.apple_pos[1] < self.game.head_pos[1]  # (0, 0) is top left
+        is_apple_right = self.game.apple_pos[0] > self.game.head_pos[0]
+        is_apple_down = self.game.apple_pos[1] > self.game.head_pos[1]
+        is_apple_left = self.game.apple_pos[0] < self.game.head_pos[0]
+
+        state = np.array([
+            *collision_list,
+            is_direction_up,
+            is_direction_right,
+            is_direction_down,
+            is_direction_left,
+            is_apple_up,
+            is_apple_right,
+            is_apple_down,
+            is_apple_left
+        ], dtype=float)
+
+        return state
+
+    def update_model(self, batch: list[tuple], batch_size: int):
         """Train model, comparing predicted Q value to target Q value from the Bellman equation"""
 
-        target = reward + GAMMA * np.max(self.target_model.predict(next_state))
-        target_q_values = self.main_model.predict(state)
-        action_index = self.index_to_action(direction, action=action, is_reversed=True)
+        state_list, direction_list, action_list, reward_list, next_state_list = zip(*batch)
+
+        # convert to arrays
+        state_arr, direction_arr, action_arr, reward_arr, next_state_arr = np.array(state_list), np.array(direction_list), np.array(action_list), np.array(reward_list), np.array(next_state_list)
+
+        target = reward_arr + GAMMA * np.max(self.target_model.predict(next_state_arr), axis=1)
+        target_q_values = self.main_model.predict(state_arr)
+        action_index = np.array([self.index_to_action(direction_arr[i], action=action_arr[i], is_reversed=True) for i in range(batch_size)])
         target_q_values[0, action_index] = target
 
-        self.main_model.train_step(np.matrix(state), target_q_values)
+        self.main_model.train_step(state_arr, target_q_values)
 
-    def run(self):
-        """Training loop"""
+    def save_model(self):
+        print(f'Saved model to "{MODEL_SAVE_PATH}"')
+        self.main_model.save_model(MODEL_SAVE_PATH)
+
+    def run(self) -> tuple[list[int], list[float]]:
+        """Training loop, return score list, reward list"""
 
         # record data to show progress of learning
         score_list = []
-        reward_list = []
+        avg_score_list = []
 
-        for episode in range(N_EPISODES):
-            is_game_over = False
-            time_since_eaten_apple = 0
-            score = 0
-            total_reward = 0
+        # get initial timestamp
+        initial_timestamp = datetime.now().timestamp()
 
-            self.game.reset()
-            state = self.get_state()
+        try:
+            for episode in range(N_EPISODES):
+                is_game_over = False
+                score = 0
 
-            while not is_game_over:
-                self.decay_epsilon()
+                self.game.reset()
+                state = self.get_state()
 
-                direction = self.game.direction
-                action = self.get_action(state)
-                is_game_over, is_eaten_apple = self.game.play_step(action)
+                while not is_game_over:
+                    self.decay_epsilon()
 
-                if is_eaten_apple:
-                    score += 1
-                    time_since_eaten_apple = 0
-                else:
-                    time_since_eaten_apple += 1
+                    direction = self.game.direction
+                    action = self.get_action(state)
+                    is_game_over, is_eaten_apple = self.game.play_step(action)
 
-                reward = self.get_reward(is_game_over, is_eaten_apple, time_since_eaten_apple)
-                total_reward += reward
+                    if is_eaten_apple:
+                        score += 1
 
-                next_state = self.get_state()
+                    reward = self.get_reward(is_game_over, is_eaten_apple)
 
-                self.update_model(np.matrix(state), direction, action, reward, np.matrix(next_state))
+                    next_state = self.get_state()
 
-                state = next_state
+                    batch = (state, direction, action, reward, next_state)
+                    self.replay_memory.append(batch)
+                    self.update_model([batch], 1)
 
-                if IS_SHOW_WINDOW:
-                    self.window.update()
+                    state = next_state
 
-            # game over
-            print(f'{episode=}: {score=}, {total_reward=}')
-            score_list.append(score)
-            reward_list.append(total_reward)
+                    if IS_SHOW_WINDOW:
+                        self.window.update()
 
-            # update target model if multiple of update frequency
-            if episode % UPDATE_TARGET_MODEL_FREQUENCY == 0:
-                self.target_model = self.main_model.copy()
+                # game over
+
+                # select batch from replay buffer and train
+                n_replays = len(self.replay_memory)
+                if n_replays >= BATCH_SIZE:
+                    batch = random.sample(self.replay_memory, BATCH_SIZE)
+                    self.update_model(batch, BATCH_SIZE)
+
+                self.running_score_list.append(score)
+                score_list.append(score)
+
+                # update target model if multiple of update frequency
+                if episode % UPDATE_TARGET_MODEL_FREQUENCY == 0:
+                    self.target_model = self.main_model.copy()
+
+                # print update every milestone
+                if episode % UPDATE_MILESTONE == 0 and episode != 0:
+                    average_score = sum(self.running_score_list) / len(self.running_score_list)
+                    timestamp = datetime.now().timestamp()
+
+                    print(f'[Episode {episode}] avg score: {average_score}, time elapsed: {timedelta(seconds=timestamp - initial_timestamp)}')
+
+                    avg_score_list.append(average_score)
+
+                # save model every milestone
+                if episode % SAVE_MODEL_MILESTONE == 0 and episode != N_EPISODES - 1 and episode != 0:
+                    self.save_model()
+
+        except KeyboardInterrupt:
+            print('Forcefully shut down by user')
 
         # training finished
-        self.main_model.save_model('snake_model.pkl')
+        self.save_model()
 
-        # plot graph of progress
-        plt.subplot(2, 1, 1)
-        plt.plot([i for i in range(N_EPISODES)], score_list)
-        plt.ylabel('Score')
+        return score_list, avg_score_list
 
-        plt.subplot(2, 1, 2)
-        plt.plot([i for i in range(N_EPISODES)], reward_list)
-        plt.xlabel('Episode')
-        plt.ylabel('Total Reward')
 
-        plt.savefig('snake_progress.png')
+def plot_graph(score_list: list[int], avg_score_list: list[float]):
+    """plot graph of progress"""
+
+    plt.plot([i for i in range(len(score_list))], score_list)
+    plt.plot([i * UPDATE_MILESTONE for i in range(len(avg_score_list))], avg_score_list)
+
+    plt.ylabel(f'Score')
+    plt.xlabel('Episode')
+
+    plt.savefig('snake_progress.png')
 
 
 def main():
     agent = Agent()
-    agent.run()
+    score_list, avg_score_list = agent.run()
+
+    plot_graph(score_list, avg_score_list)
 
 
 if __name__ == '__main__':
