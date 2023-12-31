@@ -15,7 +15,7 @@ SNAKE_MOVE_RATE = 20
 class PlayAI:
     def __init__(self):
         self.game = Game(WIDTH, HEIGHT, default_head_pos=(5, 10))
-        self.window = Window(FPS, self.game, WIDTH, HEIGHT, TILE_SIZE, GAP_SIZE)
+        self.window = Window(FPS, self.game, TILE_SIZE, GAP_SIZE)
         self.agent = Agent(model=Model.load_model('snake_model.pkl'), game=self.game)
 
         self.score = 0

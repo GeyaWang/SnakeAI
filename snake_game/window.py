@@ -49,16 +49,17 @@ class Window:
             self,
             fps: int,
             game: Game,
-            width: int,
-            height: int,
             tile_size: int,
             gap_size: int,
             background_colour: tuple[int, int, int] = (50, 50, 50),
             snake_colour: tuple[int, int, int] = (255, 255, 255),
             apple_colour: tuple[int, int, int] = (255, 0, 0)
     ):
+        width = game.width
+        height = game.height
         screen_width = width * (tile_size + gap_size) + gap_size
         screen_height = height * (tile_size + gap_size) + gap_size
+
         self.screen = pygame.display.set_mode((screen_width, screen_height))
         self.fps = fps
         self.clock = pygame.time.Clock()
