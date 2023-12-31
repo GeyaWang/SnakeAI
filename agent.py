@@ -6,16 +6,16 @@ import matplotlib.pyplot as plt
 from collections import deque
 from datetime import datetime, timedelta
 
-LEARNING_RATE = 0.007
+LEARNING_RATE = 0.003
 INITIAL_EPSILON = 1
-EPSILON_DECAY = 0.998
-MIN_EPSILON = 0.1
-UPDATE_TARGET_MODEL_FREQUENCY = 200
-MAX_MEMORY_BUFFER = 1_000
+EPSILON_DECAY = 0.9995
+MIN_EPSILON = 0.01
+UPDATE_TARGET_MODEL_FREQUENCY = 300
+MAX_MEMORY_BUFFER = 10_000
 N_EPISODES = 100_000
 GAMMA = 0.99
-BATCH_SIZE = 256
-COLLISION_DETECTION_RADIUS = 3
+BATCH_SIZE = 512
+COLLISION_DETECTION_RADIUS = 4
 UPDATE_MILESTONE = 100
 SAVE_MODEL_MILESTONE = 1000
 MODEL_SAVE_PATH = 'snake_model.pkl'
@@ -46,11 +46,13 @@ class Agent:
     def __init__(self, model: Model = None, game: Game = None):
         if model is None:
             self.main_model = Model(learning_rate=LEARNING_RATE, loss_func=MeanSquaredError)
-            self.main_model.add_layer(LayerType.FCL, input_size=7 + ((COLLISION_DETECTION_RADIUS * 2) + 1) ** 2, output_size=64)
+            self.main_model.add_layer(LayerType.FCL, input_size=7 + ((COLLISION_DETECTION_RADIUS * 2) + 1) ** 2, output_size=256)
             self.main_model.add_layer(LayerType.ACTIVATION_LAYER, activation_func=Tanh)
-            self.main_model.add_layer(LayerType.FCL, input_size=64, output_size=64)
+            self.main_model.add_layer(LayerType.FCL, input_size=256, output_size=256)
             self.main_model.add_layer(LayerType.ACTIVATION_LAYER, activation_func=Tanh)
-            self.main_model.add_layer(LayerType.FCL, input_size=64, output_size=3)
+            self.main_model.add_layer(LayerType.FCL, input_size=256, output_size=256)
+            self.main_model.add_layer(LayerType.ACTIVATION_LAYER, activation_func=Tanh)
+            self.main_model.add_layer(LayerType.FCL, input_size=256, output_size=3)
             self.target_model = self.main_model.copy()
         else:
             self.main_model = model
@@ -93,10 +95,10 @@ class Agent:
         reward = 0
 
         if is_game_over:
-            reward -= 10  # punishment for death
+            reward -= 1  # punishment for death
 
         if is_eaten_apple:
-            reward += 10  # reward eating apple
+            reward += 1  # reward eating apple
 
         return reward
 
@@ -125,7 +127,7 @@ class Agent:
             return 1
         elif (x, y) in self.game.snake_body or x >= WIDTH or x < 0 or y >= HEIGHT or y < 0:
             return 0
-        else:
+        else:  # empty space
             return 0.5
 
     def get_state(self) -> np.ndarray:
