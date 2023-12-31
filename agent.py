@@ -1,31 +1,9 @@
 from neural_network import Model, MeanSquaredError, LayerType, Tanh
-from snake_game import Game, Direction, Window
+from snake_game import Game, Direction
 import random
 import numpy as np
-import matplotlib.pyplot as plt
 from collections import deque
 from datetime import datetime, timedelta
-
-LEARNING_RATE = 0.007
-INITIAL_EPSILON = 1
-EPSILON_DECAY = 0.998
-MIN_EPSILON = 0.1
-UPDATE_TARGET_MODEL_FREQUENCY = 200
-MAX_MEMORY_BUFFER = 1_000
-N_EPISODES = 100_000
-GAMMA = 0.99
-BATCH_SIZE = 256
-COLLISION_DETECTION_RADIUS = 3
-UPDATE_MILESTONE = 100
-SAVE_MODEL_MILESTONE = 1000
-MODEL_SAVE_PATH = 'snake_model.pkl'
-
-WIDTH = 21
-HEIGHT = 21
-TILE_SIZE = 20
-GAP_SIZE = 2
-FPS = 30
-IS_SHOW_WINDOW = False
 
 
 def rotate_direction(direction: Direction, is_clockwise: bool = None):
@@ -43,34 +21,52 @@ def rotate_direction(direction: Direction, is_clockwise: bool = None):
 
 
 class Agent:
-    def __init__(self, model: Model = None, game: Game = None):
-        if model is None:
-            self.main_model = Model(learning_rate=LEARNING_RATE, loss_func=MeanSquaredError)
-            self.main_model.add_layer(LayerType.FCL, input_size=7 + ((COLLISION_DETECTION_RADIUS * 2) + 1) ** 2, output_size=64)
-            self.main_model.add_layer(LayerType.ACTIVATION_LAYER, activation_func=Tanh)
-            self.main_model.add_layer(LayerType.FCL, input_size=64, output_size=64)
-            self.main_model.add_layer(LayerType.ACTIVATION_LAYER, activation_func=Tanh)
-            self.main_model.add_layer(LayerType.FCL, input_size=64, output_size=3)
-            self.target_model = self.main_model.copy()
-        else:
-            self.main_model = model
+    def __init__(
+            self,
+            initial_epsilon,
+            epsilon_decay,
+            min_epsilon,
+            update_target_model_freq,
+            max_memory_buffer,
+            max_time_since_apple,
+            n_episodes,
+            gamma,
+            batch_size,
+            collision_detection_r,
+            update_milestone,
+            save_model_milestone,
+            model_save_path,
+            width,
+            height,
+            model,
+            game
+    ):
+        self.epsilon = initial_epsilon
+        self.epsilon_decay = epsilon_decay
+        self.min_epsilon = min_epsilon
+        self.update_target_model_freq = update_target_model_freq
+        self.max_memory_buffer = max_memory_buffer
+        self.max_time_since_apple = max_time_since_apple
+        self.n_episodes = n_episodes
+        self.gamma = gamma
+        self.batch_size = batch_size
+        self.collision_detection_r = collision_detection_r
+        self.update_milestone = update_milestone
+        self.save_model_milestone = save_model_milestone
+        self.model_save_path = model_save_path
+        self.width = width
+        self.height = height
+        self.main_model = model
+        self.target_model = self.main_model.copy()
+        self.game = game
 
-        if game is None:
-            self.game = Game(WIDTH, HEIGHT, default_head_pos=(5, 10))
-        else:
-            self.game = game
-
-        if IS_SHOW_WINDOW:
-            self.window = Window(FPS, self.game, WIDTH, HEIGHT, TILE_SIZE, GAP_SIZE)
-
-        self.epsilon = INITIAL_EPSILON
-        self.replay_memory = deque(maxlen=MAX_MEMORY_BUFFER)
-        self.running_score_list = deque(maxlen=UPDATE_MILESTONE)
+        self.replay_memory = deque(maxlen=self.max_memory_buffer)
+        self.running_score_list = deque(maxlen=self.update_milestone)
 
     def decay_epsilon(self):
         """Reduce epsilon to encourage exploitation"""
 
-        self.epsilon = max(self.epsilon * EPSILON_DECAY, MIN_EPSILON)
+        self.epsilon = max(self.epsilon * self.epsilon_decay, self.min_epsilon)
 
     @staticmethod
     def index_to_action(direction: Direction, index: int = None, action: Direction = None, is_reversed: bool = False):
@@ -123,7 +119,7 @@ class Agent:
 
         if self.game.apple_pos == (x, y):
             return 1
-        elif (x, y) in self.game.snake_body or x >= WIDTH or x < 0 or y >= HEIGHT or y < 0:
+        elif (x, y) in self.game.snake_body or x >= self.width or x < 0 or y >= self.height or y < 0:
             return 0
         else:
             return 0.5
@@ -136,29 +132,29 @@ class Agent:
             case Direction.UP:
                 collision_list = [
                     self.get_tile_state(x, y)
-                    for x in range(self.game.head_pos[0] - COLLISION_DETECTION_RADIUS, self.game.head_pos[0] + COLLISION_DETECTION_RADIUS + 1)
-                    for y in range(self.game.head_pos[1] - COLLISION_DETECTION_RADIUS, self.game.head_pos[1] + COLLISION_DETECTION_RADIUS + 1)
+                    for x in range(self.game.head_pos[0] - self.collision_detection_r, self.game.head_pos[0] + self.collision_detection_r + 1)
+                    for y in range(self.game.head_pos[1] - self.collision_detection_r, self.game.head_pos[1] + self.collision_detection_r + 1)
                     if (x, y) != self.game.head_pos
                 ]
             case Direction.RIGHT:
                 collision_list = [
                     self.get_tile_state(x, y)
-                    for y in range(self.game.head_pos[1] - COLLISION_DETECTION_RADIUS, self.game.head_pos[1] + COLLISION_DETECTION_RADIUS + 1)
-                    for x in range(self.game.head_pos[0] + COLLISION_DETECTION_RADIUS, self.game.head_pos[0] - COLLISION_DETECTION_RADIUS - 1, -1)
+                    for y in range(self.game.head_pos[1] - self.collision_detection_r, self.game.head_pos[1] + self.collision_detection_r + 1)
+                    for x in range(self.game.head_pos[0] + self.collision_detection_r, self.game.head_pos[0] - self.collision_detection_r - 1, -1)
                     if (x, y) != self.game.head_pos
                 ]
             case Direction.DOWN:
                 collision_list = [
                     self.get_tile_state(x, y)
-                    for x in range(self.game.head_pos[0] + COLLISION_DETECTION_RADIUS, self.game.head_pos[0] - COLLISION_DETECTION_RADIUS - 1, -1)
-                    for y in range(self.game.head_pos[1] + COLLISION_DETECTION_RADIUS, self.game.head_pos[1] - COLLISION_DETECTION_RADIUS - 1, -1)
+                    for x in range(self.game.head_pos[0] + self.collision_detection_r, self.game.head_pos[0] - self.collision_detection_r - 1, -1)
+                    for y in range(self.game.head_pos[1] + self.collision_detection_r, self.game.head_pos[1] - self.collision_detection_r - 1, -1)
                     if (x, y) != self.game.head_pos
                 ]
             case _:
                 collision_list = [
                     self.get_tile_state(x, y)
-                    for y in range(self.game.head_pos[1] + COLLISION_DETECTION_RADIUS, self.game.head_pos[1] - COLLISION_DETECTION_RADIUS - 1, -1)
-                    for x in range(self.game.head_pos[0] - COLLISION_DETECTION_RADIUS, self.game.head_pos[0] + COLLISION_DETECTION_RADIUS + 1)
+                    for y in range(self.game.head_pos[1] + self.collision_detection_r, self.game.head_pos[1] - self.collision_detection_r - 1, -1)
+                    for x in range(self.game.head_pos[0] - self.collision_detection_r, self.game.head_pos[0] + self.collision_detection_r + 1)
                     if (x, y) != self.game.head_pos
                 ]
 
@@ -193,7 +189,7 @@ class Agent:
         # convert to arrays
         state_arr, direction_arr, action_arr, reward_arr, next_state_arr = np.array(state_list), np.array(direction_list), np.array(action_list), np.array(reward_list), np.array(next_state_list)
 
-        target = reward_arr + GAMMA * np.max(self.target_model.predict(next_state_arr), axis=1)
+        target = reward_arr + self.gamma * np.max(self.target_model.predict(next_state_arr), axis=1)
         target_q_values = self.main_model.predict(state_arr)
         action_index = np.array([self.index_to_action(direction_arr[i], action=action_arr[i], is_reversed=True) for i in range(batch_size)])
         target_q_values[0, action_index] = target
@@ -201,8 +197,8 @@ class Agent:
         self.main_model.train_step(state_arr, target_q_values)
 
     def save_model(self):
-        print(f'Saved model to "{MODEL_SAVE_PATH}"')
-        self.main_model.save_model(MODEL_SAVE_PATH)
+        print(f'Saved model to "{self.model_save_path}"')
+        self.main_model.save_model(self.model_save_path)
 
     def run(self) -> tuple[list[int], list[float]]:
         """Training loop, return score list, reward list"""
@@ -215,53 +211,67 @@ class Agent:
         initial_timestamp = datetime.now().timestamp()
 
         try:
-            for episode in range(N_EPISODES):
+            for episode in range(self.n_episodes):
                 is_game_over = False
                 score = 0
+                time_since_apple = 0
 
                 self.game.reset()
                 state = self.get_state()
 
                 while not is_game_over:
+                    # reduce epsilon
                     self.decay_epsilon()
 
                     direction = self.game.direction
+
+                    # use epsilon greedy policy to choose action
                     action = self.get_action(state)
+
+                    # play game step
                     is_game_over, is_eaten_apple = self.game.play_step(action)
 
                     if is_eaten_apple:
                         score += 1
+                        time_since_apple = 0
+                    else:
+                        time_since_apple += 1
 
+                    # if too long since eaten apple, stop
+                    if time_since_apple >= self.max_time_since_apple:
+                        break
+
+                    # calculate reward
                     reward = self.get_reward(is_game_over, is_eaten_apple)
 
+                    # continue to next step
                     next_state = self.get_state()
 
+                    # train step
                     batch = (state, direction, action, reward, next_state)
                     self.replay_memory.append(batch)
                     self.update_model([batch], 1)
 
                     state = next_state
 
-                    if IS_SHOW_WINDOW:
-                        self.window.update()
-
-                # game over
+                """Game Over"""
 
                 # select batch from replay buffer and train
                 n_replays = len(self.replay_memory)
-                if n_replays >= BATCH_SIZE:
-                    batch = random.sample(self.replay_memory, BATCH_SIZE)
-                    self.update_model(batch, BATCH_SIZE)
+                if n_replays >= self.batch_size:
+                    batch = random.sample(self.replay_memory, self.batch_size)
+                    self.update_model(batch, self.batch_size)
 
+                # record data
                 self.running_score_list.append(score)
                 score_list.append(score)
 
                 # update target model if multiple of update frequency
-                if episode % UPDATE_TARGET_MODEL_FREQUENCY == 0:
+                if episode % self.update_target_model_freq == 0:
                     self.target_model = self.main_model.copy()
 
                 # print update every milestone
-                if episode % UPDATE_MILESTONE == 0 and episode != 0:
+                if episode % self.update_milestone == 0 and episode != 0:
                     average_score = sum(self.running_score_list) / len(self.running_score_list)
                     timestamp = datetime.now().timestamp()
 
@@ -270,7 +280,7 @@ class Agent:
                     avg_score_list.append(average_score)
 
                 # save model every milestone
-                if episode % SAVE_MODEL_MILESTONE == 0 and episode != N_EPISODES - 1 and episode != 0:
+                if episode % self.save_model_milestone == 0 and episode != self.n_episodes - 1 and episode != 0:
                     self.save_model()
 
         except KeyboardInterrupt:
@@ -280,26 +290,3 @@ class Agent:
         self.save_model()
 
         return score_list, avg_score_list
-
-
-def plot_graph(score_list: list[int], avg_score_list: list[float]):
-    """plot graph of progress"""
-
-    plt.plot([i for i in range(len(score_list))], score_list)
-    plt.plot([i * UPDATE_MILESTONE for i in range(len(avg_score_list))], avg_score_list)
-
-    plt.ylabel(f'Score')
-    plt.xlabel('Episode')
-
-    plt.savefig('snake_progress.png')
-
-
-def main():
-    agent = Agent()
-    score_list, avg_score_list = agent.run()
-
-    plot_graph(score_list, avg_score_list)
-
-
-if __name__ == '__main__':
-    main()
