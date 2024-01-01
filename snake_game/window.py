@@ -57,15 +57,22 @@ class Window:
     ):
         width = game.width
         height = game.height
-        screen_width = width * (tile_size + gap_size) + gap_size
-        screen_height = height * (tile_size + gap_size) + gap_size
+        self.screen_width = width * (tile_size + gap_size) + gap_size
+        self.screen_height = height * (tile_size + gap_size) + gap_size
 
-        self.screen = pygame.display.set_mode((screen_width, screen_height))
+        self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
         self.fps = fps
         self.clock = pygame.time.Clock()
 
         self.game = game,
         self.draw = Draw(game, tile_size, gap_size, background_colour, snake_colour, apple_colour)
+
+    def save_image(self, file_path: str):
+        pygame.image.save(self.screen, file_path)
+
+    @staticmethod
+    def close():
+        pygame.quit()
 
     def update(self) -> list[pygame.event.Event]:
         events = pygame.event.get()
