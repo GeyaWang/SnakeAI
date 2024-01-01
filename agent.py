@@ -1,9 +1,9 @@
-from neural_network import Model, MeanSquaredError, LayerType, Tanh
-from snake_game import Game, Direction
+from snake_game import Direction
 import random
 import numpy as np
 from collections import deque
 from datetime import datetime, timedelta
+from config import *
 
 
 def rotate_direction(direction: Direction, is_clockwise: bool = None):
@@ -23,50 +23,24 @@ def rotate_direction(direction: Direction, is_clockwise: bool = None):
 class Agent:
     def __init__(
             self,
-            initial_epsilon,
-            epsilon_decay,
-            min_epsilon,
-            update_target_model_freq,
-            max_memory_buffer,
-            max_time_since_apple,
-            n_episodes,
-            gamma,
-            batch_size,
-            collision_detection_r,
-            update_milestone,
-            save_model_milestone,
-            model_save_path,
-            width,
-            height,
             model,
             game
     ):
-        self.epsilon = initial_epsilon
-        self.epsilon_decay = epsilon_decay
-        self.min_epsilon = min_epsilon
-        self.update_target_model_freq = update_target_model_freq
-        self.max_memory_buffer = max_memory_buffer
-        self.max_time_since_apple = max_time_since_apple
-        self.n_episodes = n_episodes
-        self.gamma = gamma
-        self.batch_size = batch_size
-        self.collision_detection_r = collision_detection_r
-        self.update_milestone = update_milestone
-        self.save_model_milestone = save_model_milestone
-        self.model_save_path = model_save_path
-        self.width = width
-        self.height = height
+        self.epsilon = INITIAL_EPSILON
         self.main_model = model
         self.target_model = self.main_model.copy()
         self.game = game
 
-        self.replay_memory = deque(maxlen=self.max_memory_buffer)
-        self.running_score_list = deque(maxlen=self.update_milestone)
+        self.width = self.game.width
+        self.height = self.game.height
+
+        self.replay_memory = deque(maxlen=MAX_MEMORY_BUFFER)
+        self.running_score_list = deque(maxlen=UPDATE_MILESTONE)
 
     def decay_epsilon(self):
         """Reduce epsilon to encourage exploitation"""
 
-        self.epsilon = max(self.epsilon * self.epsilon_decay, self.min_epsilon)
+        self.epsilon = max(self.epsilon * EPSILON_DECAY, MIN_EPSILON)
 
     @staticmethod
     def index_to_action(direction: Direction, index: int = None, action: Direction = None, is_reversed: bool = False):
@@ -132,29 +106,29 @@ class Agent:
             case Direction.UP:
                 collision_list = [
                     self.get_tile_state(x, y)
-                    for x in range(self.game.head_pos[0] - self.collision_detection_r, self.game.head_pos[0] + self.collision_detection_r + 1)
-                    for y in range(self.game.head_pos[1] - self.collision_detection_r, self.game.head_pos[1] + self.collision_detection_r + 1)
+                    for x in range(self.game.head_pos[0] - COLLISION_DETECTION_RADIUS, self.game.head_pos[0] + COLLISION_DETECTION_RADIUS + 1)
+                    for y in range(self.game.head_pos[1] - COLLISION_DETECTION_RADIUS, self.game.head_pos[1] + COLLISION_DETECTION_RADIUS + 1)
                     if (x, y) != self.game.head_pos
                 ]
             case Direction.RIGHT:
                 collision_list = [
                     self.get_tile_state(x, y)
-                    for y in range(self.game.head_pos[1] - self.collision_detection_r, self.game.head_pos[1] + self.collision_detection_r + 1)
-                    for x in range(self.game.head_pos[0] + self.collision_detection_r, self.game.head_pos[0] - self.collision_detection_r - 1, -1)
+                    for y in range(self.game.head_pos[1] - COLLISION_DETECTION_RADIUS, self.game.head_pos[1] + COLLISION_DETECTION_RADIUS + 1)
+                    for x in range(self.game.head_pos[0] + COLLISION_DETECTION_RADIUS, self.game.head_pos[0] - COLLISION_DETECTION_RADIUS - 1, -1)
                     if (x, y) != self.game.head_pos
                 ]
             case Direction.DOWN:
                 collision_list = [
                     self.get_tile_state(x, y)
-                    for x in range(self.game.head_pos[0] + self.collision_detection_r, self.game.head_pos[0] - self.collision_detection_r - 1, -1)
-                    for y in range(self.game.head_pos[1] + self.collision_detection_r, self.game.head_pos[1] - self.collision_detection_r - 1, -1)
+                    for x in range(self.game.head_pos[0] + COLLISION_DETECTION_RADIUS, self.game.head_pos[0] - COLLISION_DETECTION_RADIUS - 1, -1)
+                    for y in range(self.game.head_pos[1] + COLLISION_DETECTION_RADIUS, self.game.head_pos[1] - COLLISION_DETECTION_RADIUS - 1, -1)
                     if (x, y) != self.game.head_pos
                 ]
             case _:
                 collision_list = [
                     self.get_tile_state(x, y)
-                    for y in range(self.game.head_pos[1] + self.collision_detection_r, self.game.head_pos[1] - self.collision_detection_r - 1, -1)
-                    for x in range(self.game.head_pos[0] - self.collision_detection_r, self.game.head_pos[0] + self.collision_detection_r + 1)
+                    for y in range(self.game.head_pos[1] + COLLISION_DETECTION_RADIUS, self.game.head_pos[1] - COLLISION_DETECTION_RADIUS - 1, -1)
+                    for x in range(self.game.head_pos[0] - COLLISION_DETECTION_RADIUS, self.game.head_pos[0] + COLLISION_DETECTION_RADIUS + 1)
                     if (x, y) != self.game.head_pos
                 ]
 
@@ -189,7 +163,7 @@ class Agent:
         # convert to arrays
         state_arr, direction_arr, action_arr, reward_arr, next_state_arr = np.array(state_list), np.array(direction_list), np.array(action_list), np.array(reward_list), np.array(next_state_list)
 
-        target = reward_arr + self.gamma * np.max(self.target_model.predict(next_state_arr), axis=1)
+        target = reward_arr + GAMMA * np.max(self.target_model.predict(next_state_arr), axis=1)
         target_q_values = self.main_model.predict(state_arr)
         action_index = np.array([self.index_to_action(direction_arr[i], action=action_arr[i], is_reversed=True) for i in range(batch_size)])
         target_q_values[0, action_index] = target
@@ -197,8 +171,8 @@ class Agent:
         self.main_model.train_step(state_arr, target_q_values)
 
     def save_model(self):
-        print(f'Saved model to "{self.model_save_path}"')
-        self.main_model.save_model(self.model_save_path)
+        print(f'Saved model to "{MODEL_SAVE_PATH}"')
+        self.main_model.save_model(MODEL_SAVE_PATH)
 
     def run(self) -> tuple[list[int], list[float]]:
         """Training loop, return score list, reward list"""
@@ -211,7 +185,7 @@ class Agent:
         initial_timestamp = datetime.now().timestamp()
 
         try:
-            for episode in range(self.n_episodes):
+            for episode in range(N_EPISODES):
                 is_game_over = False
                 score = 0
                 time_since_apple = 0
@@ -238,7 +212,7 @@ class Agent:
                         time_since_apple += 1
 
                     # if too long since eaten apple, stop
-                    if time_since_apple >= self.max_time_since_apple:
+                    if time_since_apple >= MAX_TIME_SINCE_APPLE:
                         break
 
                     # calculate reward
@@ -258,20 +232,20 @@ class Agent:
 
                 # select batch from replay buffer and train
                 n_replays = len(self.replay_memory)
-                if n_replays >= self.batch_size:
-                    batch = random.sample(self.replay_memory, self.batch_size)
-                    self.update_model(batch, self.batch_size)
+                if n_replays >= BATCH_SIZE:
+                    batch = random.sample(self.replay_memory, BATCH_SIZE)
+                    self.update_model(batch, BATCH_SIZE)
 
                 # record data
                 self.running_score_list.append(score)
                 score_list.append(score)
 
                 # update target model if multiple of update frequency
-                if episode % self.update_target_model_freq == 0:
+                if episode % UPDATE_TARGET_MODEL_FREQUENCY == 0:
                     self.target_model = self.main_model.copy()
 
                 # print update every milestone
-                if episode % self.update_milestone == 0 and episode != 0:
+                if episode % UPDATE_MILESTONE == 0 and episode != 0:
                     average_score = sum(self.running_score_list) / len(self.running_score_list)
                     timestamp = datetime.now().timestamp()
 
@@ -280,7 +254,7 @@ class Agent:
                     avg_score_list.append(average_score)
 
                 # save model every milestone
-                if episode % self.save_model_milestone == 0 and episode != self.n_episodes - 1 and episode != 0:
+                if episode % SAVE_MODEL_MILESTONE == 0 and episode != N_EPISODES - 1 and episode != 0:
                     self.save_model()
 
         except KeyboardInterrupt:
