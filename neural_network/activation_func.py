@@ -22,3 +22,19 @@ class Tanh(ActivationFunction):
     @staticmethod
     def prime_func(x: float) -> float:
         return 1 - tanh(x) ** 2
+
+
+class ReLU(ActivationFunction):
+    @staticmethod
+    def func(x: float) -> float:
+        if x < 0:
+            return 0
+        else:
+            return x
+
+    @staticmethod
+    def prime_func(x: float) -> float:
+        if x < 0:
+            return 0
+        else:
+            return 1
