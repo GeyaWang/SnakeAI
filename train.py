@@ -1,7 +1,6 @@
 from matplotlib import pyplot as plt
 from agent import Agent
-from threading import Thread
-from snake_game import Window, Game
+from snake_game import Game
 from neural_network import Model, MeanSquaredError, Tanh, LayerType
 from config import *
 import sys
@@ -9,10 +8,6 @@ import sys
 
 WIDTH = 21
 HEIGHT = 21
-TILE_SIZE = 20
-GAP_SIZE = 2
-FPS = 120
-IS_SHOW_WINDOW = False
 IS_USE_PREV_MODEL = True
 
 
@@ -28,12 +23,6 @@ def plot_graph(score_list: list[int], avg_score_list: list[float]):
     plt.savefig('snake_progress.png')
 
 
-def game_thread(game: Game):
-    window = Window(FPS, game, TILE_SIZE, GAP_SIZE)
-    while True:
-        window.update()
-
-
 def main():
     game = Game(WIDTH, HEIGHT, default_head_pos=(5, 10))
 
@@ -46,10 +35,6 @@ def main():
         model.add_layer(LayerType.FCL, input_size=256, output_size=256)
         model.add_layer(LayerType.ACTIVATION_LAYER, activation_func=Tanh)
         model.add_layer(LayerType.FCL, input_size=256, output_size=3)
-
-    if IS_SHOW_WINDOW:
-        t = Thread(target=game_thread, daemon=True, args=(game,))
-        t.start()
 
     agent = Agent(model, game)
     score_list, avg_score_list = agent.run()
